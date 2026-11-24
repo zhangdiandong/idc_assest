@@ -298,7 +298,7 @@ const Login = () => {
               <div className="brand-title-section">
                 <h1 className="brand-title">
                   <span className="brand-title__main">IDC</span>
-                  <span className="brand-title__sub">机柜管理系统</span>
+                  <span className="brand-title__sub">IDC设备管理系统</span>
                 </h1>
                 <p className="brand-desc">智能数据中心基础设施管理平台</p>
               </div>

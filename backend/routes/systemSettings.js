@@ -88,7 +88,7 @@ const initDefaultSettings = async () => {
     // 基本设置 - 站点信息
     {
       settingKey: 'site_name',
-      settingValue: JSON.stringify('机柜管理系统'),
+      settingValue: JSON.stringify('IDC设备管理系统'),
       settingType: 'string',
       category: 'general',
       description: '网站名称',
@@ -190,7 +190,7 @@ const initDefaultSettings = async () => {
     },
     {
       settingKey: 'system_description',
-      settingValue: JSON.stringify('机柜管理系统 - 专业的数据中心设备管理解决方案'),
+      settingValue: JSON.stringify('IDC设备管理系统 - 专业的数据中心设备管理解决方案'),
       settingType: 'string',
       category: 'about',
       description: '系统描述',
@@ -702,7 +702,7 @@ router.post('/reset/:key', requirePermission('settings:edit'), async (req, res) 
     }
 
     const defaultValues = {
-      site_name: '机柜管理系统',
+      site_name: 'IDC设备管理系统',
       site_logo: '',
       idle_timeout: 30,
       max_login_attempts: 5,
@@ -713,7 +713,7 @@ router.post('/reset/:key', requirePermission('settings:edit'), async (req, res) 
       contact_email: '',
       contact_phone: '',
       company_address: '',
-      system_description: '机柜管理系统 - 专业的数据中心设备管理解决方案',
+      system_description: 'IDC设备管理系统 - 专业的数据中心设备管理解决方案',
     };
 
     const defaultValue = defaultValues[key];
@@ -1194,7 +1194,7 @@ router.get('/system/info', async (req, res) => {
 
     res.json({
       system: {
-        name: '机柜管理系统',
+        name: 'IDC设备管理系统',
         version: APP_VERSION,
         uptime: process.uptime(),
         nodeVersion: process.version,

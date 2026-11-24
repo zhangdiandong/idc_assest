@@ -19,7 +19,7 @@ test.describe('冒烟：登录与路由保护', () => {
 
   test('TC-FE-LOGIN-012 登录页品牌元素存在', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: /IDC.*机柜管理系统/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /IDC.*设备管理系统/ })).toBeVisible();
     await expect(page.locator('.footer-version, .form-footer').getByText(/v\d+\.\d+\.\d+/).first()).toBeVisible();
   });
 

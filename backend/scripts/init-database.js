@@ -46,7 +46,7 @@ const defaultSettings = [
   // 全局配置
   {
     settingKey: 'site_name',
-    settingValue: JSON.stringify('机柜管理系统'),
+    settingValue: JSON.stringify('IDC设备管理系统'),
     settingType: 'string',
     category: 'general',
     description: '网站名称',
@@ -210,7 +210,7 @@ const defaultSettings = [
   },
   {
     settingKey: 'system_description',
-    settingValue: JSON.stringify('机柜管理系统 - 专业的数据中心设备管理解决方案'),
+    settingValue: JSON.stringify('IDC设备管理系统 - 专业的数据中心设备管理解决方案'),
     settingType: 'string',
     category: 'about',
     description: '系统描述',

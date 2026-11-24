@@ -20,6 +20,9 @@ const permissionsData = [
   { permissionId: 'perm_dashboard', permissionName: '仪表盘', permissionCode: 'dashboard', parentId: null, type: 'module', sort: 10, status: 'active' },
   { permissionId: 'perm_dashboard_view', permissionName: '查看仪表盘', permissionCode: 'dashboard:view', parentId: 'dashboard', type: 'menu', sort: 11, status: 'active' },
   { permissionId: 'perm_dashboard_export', permissionName: '导出数据', permissionCode: 'dashboard:export', parentId: 'dashboard:view', type: 'button', sort: 12, status: 'active' },
+  { permissionId: 'perm_capacity_page', permissionName: '利用率大盘', permissionCode: 'capacity:page', parentId: 'dashboard', type: 'menu', sort: 13, status: 'active' },
+  { permissionId: 'perm_capacity_view', permissionName: '查看利用率大盘', permissionCode: 'capacity:view', parentId: 'capacity:page', type: 'button', sort: 14, status: 'active' },
+  { permissionId: 'perm_capacity_export', permissionName: '导出容量数据', permissionCode: 'capacity:export', parentId: 'capacity:page', type: 'button', sort: 15, status: 'active' },
 
   // ==============================
   // 2. 机房管理模块

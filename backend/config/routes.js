@@ -98,6 +98,10 @@ const routesConfig = [
     path: '/api/statistics',
   },
   {
+    file: 'capacity.js',
+    path: '/api/capacity',
+  },
+  {
     file: 'operationLogs.js',
     path: '/api/operation-logs',
   },

@@ -705,7 +705,7 @@ const SystemSettings = () => {
               <DatabaseOutlined style={{ fontSize: 36, color: '#fff' }} />
             </div>
             <Title level={3} style={{ color: '#fff', margin: 0, marginBottom: 10, fontSize: '22px', fontWeight: 600 }}>
-              机柜管理系统
+              IDC设备管理系统
             </Title>
             <div style={{ marginBottom: 10 }}>
               <Space size={10} wrap style={{ color: 'rgba(255,255,255,0.9)', justifyContent: 'center' }}>

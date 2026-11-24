@@ -39,6 +39,7 @@ import {
   CloudUploadOutlined,
   LayoutOutlined,
   SafetyOutlined,
+  PieChartOutlined,
 } from '@ant-design/icons';
 import {
   BrowserRouter as Router,
@@ -93,6 +94,7 @@ const ErrorBoundaryTest = lazy(() => import('./pages/ErrorBoundaryTest'));
 const IdleDeviceManagement = lazy(() => import('./pages/IdleDeviceManagement'));
 const RoomFloorPlan = lazy(() => import('./pages/RoomFloorPlan'));
 const IpamManagement = lazy(() => import('./pages/IpamManagement'));
+const CapacityDashboard = lazy(() => import('./pages/CapacityDashboard'));
 
 const { Header, Content, Sider } = Layout;
 
@@ -199,6 +201,7 @@ const AppLayout = ({ children }) => {
   const getSelectedKey = () => {
     const path = location.pathname;
     if (path === '/') return 'dashboard';
+    if (path.startsWith('/capacity')) return 'capacity-dashboard';
     if (path.startsWith('/visualization-3d')) return 'visualization-3d';
     if (path.startsWith('/rooms') || path.startsWith('/racks')) return 'room-management';
     if (path.startsWith('/cables') || path.startsWith('/ports')) return 'line-management';
@@ -231,6 +234,11 @@ const AppLayout = ({ children }) => {
       icon: <BarChartOutlined style={{ fontSize: '18px' }} />,
       label: <Link to="/">仪表盘</Link>,
     },
+    ...(hasPermission('capacity:view') || hasPermission('dashboard:view') ? [{
+      key: 'capacity-dashboard',
+      icon: <PieChartOutlined style={{ fontSize: '18px' }} />,
+      label: <Link to="/capacity">利用率大盘</Link>,
+    }] : []),
     ...(hasPermission('room:view') || hasPermission('rack:view') || hasPermission('rack:3d') || hasPermission('floorplan') ? [{
       key: 'room-management',
       icon: <HomeOutlined style={{ fontSize: '18px' }} />,
@@ -597,6 +605,7 @@ const AppLayout = ({ children }) => {
 
 const routeConfig = [
   { path: '/', component: Dashboard },
+  { path: '/capacity', component: CapacityDashboard },
   { path: '/devices', component: DeviceManagement },
   { path: '/racks', component: RackManagement },
   { path: '/rooms', component: RoomManagement },

@@ -8,7 +8,7 @@ import axios from 'axios';
 
 // 主题色固定为默认紫蓝渐变（外观设置已移除，不再支持自定义）
 const defaultConfig = {
-  site_name: '机柜管理系统',
+  site_name: 'IDC设备管理系统',
   site_logo: '',
   primary_color: '#667eea',
   secondary_color: '#764ba2',
