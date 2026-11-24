@@ -77,10 +77,11 @@ const getRoomSceneParams = (racks) => {
   // 计算整体包围盒中心
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   racks.forEach(r => {
-    const col = r.colPos || 1;
-    const row = r.rowPos || 1;
-    const x = (col - 1) * rackSpacingX;
-    const z = (row - 1) * rackSpacingZ;
+    // colPos/rowPos 以 0 为起始列行，不能用 || 兜底（0 会被误判为假值导致与第 1 列重叠）
+    const col = Number.isInteger(r.colPos) ? r.colPos : 0;
+    const row = Number.isInteger(r.rowPos) ? r.rowPos : 0;
+    const x = col * rackSpacingX;
+    const z = row * rackSpacingZ;
     minX = Math.min(minX, x); maxX = Math.max(maxX, x);
     minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
   });
@@ -109,10 +110,10 @@ const getFocusRackSceneParams = (focusRack) => {
   const base = getRackSceneParams(focusRack);
   const rackSpacingX = 1.6;
   const rackSpacingZ = 2.0;
-  const col = focusRack?.colPos || 1;
-  const row = focusRack?.rowPos || 1;
-  const worldX = (col - 1) * rackSpacingX;
-  const worldZ = (row - 1) * rackSpacingZ;
+  const col = Number.isInteger(focusRack?.colPos) ? focusRack.colPos : 0;
+  const row = Number.isInteger(focusRack?.rowPos) ? focusRack.rowPos : 0;
+  const worldX = col * rackSpacingX;
+  const worldZ = row * rackSpacingZ;
 
   const cameraPosition = base.cameraPosition.clone().add(new THREE.Vector3(worldX, 0, worldZ));
   const target = base.target.clone().add(new THREE.Vector3(worldX, 0, worldZ));
@@ -233,10 +234,10 @@ const Floor = ({ racks = [], viewMode = 'single' }) => {
     if (viewMode === 'room' && racks.length > 1) {
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
       racks.forEach(r => {
-        const col = r.colPos || 1;
-        const row = r.rowPos || 1;
-        const x = (col - 1) * rackSpacingX;
-        const z = (row - 1) * rackSpacingZ;
+        const col = Number.isInteger(r.colPos) ? r.colPos : 0;
+        const row = Number.isInteger(r.rowPos) ? r.rowPos : 0;
+        const x = col * rackSpacingX;
+        const z = row * rackSpacingZ;
         minX = Math.min(minX, x); maxX = Math.max(maxX, x);
         minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
       });
@@ -425,8 +426,8 @@ const Scene = forwardRef(
             <group position={[0, 0, 0]}>
               {roomRackModelProps.map((props, index) => {
                 // 机柜位置：根据 colPos/rowPos 排布
-                const col = props.rack.colPos || 1;
-                const row = props.rack.rowPos || 1;
+                const col = Number.isInteger(props.rack.colPos) ? props.rack.colPos : 0;
+                const row = Number.isInteger(props.rack.rowPos) ? props.rack.rowPos : 0;
                 const rackSpacingX = 1.6;
                 const rackSpacingZ = 2.0;
                 // 聚焦模式下：只显示当前聚焦机柜，隐藏其他机柜
@@ -439,7 +440,7 @@ const Scene = forwardRef(
                 return (
                   <group
                     key={props.rack.rackId || `rack-${index}`}
-                    position={[(col - 1) * rackSpacingX, 0, (row - 1) * rackSpacingZ]}
+                    position={[col * rackSpacingX, 0, row * rackSpacingZ]}
                   >
                     <RackModel {...props} dimmed={false} />
                   </group>

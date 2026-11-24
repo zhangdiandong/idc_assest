@@ -632,6 +632,9 @@ const DeviceModel = ({
   position,
   rackDepth,
   slideEnabled = true,
+  // 由外层（RackModel 的 DeviceSlot）统一接管点击时置 true：
+  // 避免内部 stopPropagation 吞掉点击，让高/中/低 LOD 共用同一套点击与滑出逻辑
+  disableClick = false,
 }) => {
   const mesh = useRef();
   const groupRef = useRef();
@@ -1469,19 +1472,24 @@ const DeviceModel = ({
     <group position={position || [0, 0, 0]}>
       <group
         ref={groupRef}
-        onClick={e => {
-          e.stopPropagation();
-          // 点击设备：弹出/收回效果（设备滑出）
-          // 需求：点击设备时弹出/收回。开启"设备弹出"开关后，单击切换滑出状态，
-          // 再次单击同一设备收回。同时打开设备详情 Drawer。
-          if (slideEnabled) {
-            isExtendedRef.current = !isExtendedRef.current;
-          }
-          // 单击触发选中回调（让详情面板打开）
-          onClick && onClick(device);
-        }}
+        {...(disableClick
+          ? {}
+          : {
+              onClick: e => {
+                e.stopPropagation();
+                // 点击设备：弹出/收回效果（设备滑出）
+                // 需求：点击设备时弹出/收回。开启"设备弹出"开关后，单击切换滑出状态，
+                // 再次单击同一设备收回。同时打开设备详情 Drawer。
+                if (slideEnabled) {
+                  isExtendedRef.current = !isExtendedRef.current;
+                }
+                // 单击触发选中回调（让详情面板打开）
+                onClick && onClick(device);
+              },
+            })}
         onPointerOver={e => {
-          e.stopPropagation();
+          // 外层 DeviceSlot 接管交互时不阻断冒泡，否则外层的悬停回调收不到
+          if (!disableClick) e.stopPropagation();
           // 使用 ref 避免重复设置状态
           if (!isHoveredRef.current) {
             isHoveredRef.current = true;
@@ -1635,6 +1643,9 @@ const DeviceModelMemo = React.memo(DeviceModel, (prevProps, nextProps) => {
 
   // 比较滑出动画开关
   if (prevProps.slideEnabled !== nextProps.slideEnabled) return false;
+
+  // 比较点击接管开关（外层统一处理点击时为 true）
+  if (prevProps.disableClick !== nextProps.disableClick) return false;
 
   // 比较位置（修复：原使用 JSON.stringify 性能差，改为逐元素比较）
   const prevPos = prevProps.position;

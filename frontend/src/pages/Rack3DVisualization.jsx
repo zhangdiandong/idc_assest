@@ -617,9 +617,10 @@ const Rack3DVisualization = () => {
   const handleRackClick3D = useCallback(
     rack => {
       if (!rack) return;
-      // 点击已聚焦的机柜 -> 退出聚焦，展示全部机柜
+      // 聚焦状态下再次点击该机柜不再退出聚焦：
+      // 设备间隙、安装轨、立柱等区域命中机柜框架时容易误触发退出，导致点设备时"机柜选择被取消"。
+      // 退出聚焦统一由点击场景空白处（handleBackgroundClick）触发。
       if (focusRack?.rackId === rack.rackId) {
-        setFocusRack(null);
         return;
       }
       setFocusRack(rack);

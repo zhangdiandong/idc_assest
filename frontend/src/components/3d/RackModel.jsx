@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useEffect, useLayoutEffect } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import DeviceModel from './DeviceModel';
 import LODManager, { LOD_LEVELS } from './LODManager';
@@ -59,6 +60,47 @@ const TickInstances = ({ instances, geometry, material }) => {
       ref={meshRef}
       args={[geometry, material, instances.length]}
     />
+  );
+};
+
+/**
+ * 设备槽位：统一承载设备点击、悬停与滑出动画
+ * 放在 LODManager 外层，使高（DeviceModel）/中/低（简化 mesh）三种细节级别
+ * 共用同一套交互与弹出效果，避免整机房视图下切换 LOD 后点击无响应或不弹出
+ */
+const DeviceSlot = ({ device, slideEnabled = true, onClick, onPointerOver, onPointerOut, children }) => {
+  const groupRef = useRef();
+  const extendedRef = useRef(false);
+  const currentZRef = useRef(0);
+
+  useFrame(() => {
+    if (!slideEnabled) extendedRef.current = false;
+    if (!extendedRef.current && Math.abs(currentZRef.current) < 0.001) return;
+    const targetZ = extendedRef.current ? 0.6 : 0;
+    currentZRef.current += (targetZ - currentZRef.current) * 0.1;
+    if (groupRef.current) {
+      groupRef.current.position.z = currentZRef.current;
+    }
+  });
+
+  return (
+    <group
+      ref={groupRef}
+      onClick={e => {
+        e.stopPropagation();
+        if (slideEnabled) extendedRef.current = !extendedRef.current;
+        onClick?.(device);
+      }}
+      onPointerOver={e => {
+        e.stopPropagation();
+        onPointerOver?.(device);
+      }}
+      onPointerOut={() => {
+        onPointerOut?.(device);
+      }}
+    >
+      {children}
+    </group>
   );
 };
 
@@ -327,8 +369,15 @@ const RackModel = ({
           const statusColor = DEVICE_COLORS.status[device.status] || DEVICE_COLORS.status.running;
 
           return (
-            <LODManager
+            <DeviceSlot
               key={device.deviceId || device.id}
+              device={device}
+              slideEnabled={deviceSlideEnabled}
+              onClick={onDeviceClick}
+              onPointerOver={onDeviceHover}
+              onPointerOut={onDeviceLeave}
+            >
+            <LODManager
               device={device}
               uHeight={uHeight}
               rackDepth={depth}
@@ -350,9 +399,11 @@ const RackModel = ({
                 onAddNic={onAddNic}
                 onAddPort={onAddPort}
                 tooltipFields={tooltipFields}
-                slideEnabled={deviceSlideEnabled}
+                slideEnabled={false}
+                disableClick
               />
             </LODManager>
+            </DeviceSlot>
           );
         })}
       </group>
