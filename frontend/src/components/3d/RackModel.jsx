@@ -74,6 +74,9 @@ const RackModel = ({
   onAddPort,
   tooltipFields,
   deviceSlideEnabled = true,
+  onRackClick,
+  isSelected = false,
+  dimmed = false,
 }) => {
   const width = 0.6;
   const depth = 1.0;
@@ -185,34 +188,47 @@ const RackModel = ({
   //   - 侧板：中灰色，略深于框架
   //   - 金属度高、粗糙度中等，模拟真实钣金反光
   const frame = useMemo(() => {
-    const materialProps = { color: '#9ca3af', roughness: 0.4, metalness: 0.85 };
+    const materialProps = {
+      color: '#9ca3af',
+      roughness: 0.4,
+      metalness: 0.85,
+      // 聚焦模式下非聚焦机柜淡化：半透明
+      transparent: dimmed,
+      opacity: dimmed ? 0.12 : 1,
+    };
     const postArgs = [postWidth, height, postWidth];
     const topBottomArgs = [width + 0.02, 0.02, depth + 0.02];
 
+    // 机柜点击选中处理器（整机房模式下点击机柜切换选中）
+    const handleRackClick = e => {
+      if (e) e.stopPropagation();
+      onRackClick?.(rack);
+    };
+
     return (
       <group>
-        <mesh position={[-width / 2 + postWidth / 2, height / 2, -depth / 2 + postWidth / 2]}>
+        <mesh position={[-width / 2 + postWidth / 2, height / 2, -depth / 2 + postWidth / 2]} onClick={handleRackClick}>
           <boxGeometry args={postArgs} />
           <meshStandardMaterial {...materialProps} />
         </mesh>
-        <mesh position={[width / 2 - postWidth / 2, height / 2, -depth / 2 + postWidth / 2]}>
+        <mesh position={[width / 2 - postWidth / 2, height / 2, -depth / 2 + postWidth / 2]} onClick={handleRackClick}>
           <boxGeometry args={postArgs} />
           <meshStandardMaterial {...materialProps} />
         </mesh>
-        <mesh position={[-width / 2 + postWidth / 2, height / 2, depth / 2 - postWidth / 2]}>
+        <mesh position={[-width / 2 + postWidth / 2, height / 2, depth / 2 - postWidth / 2]} onClick={handleRackClick}>
           <boxGeometry args={postArgs} />
           <meshStandardMaterial {...materialProps} />
         </mesh>
-        <mesh position={[width / 2 - postWidth / 2, height / 2, depth / 2 - postWidth / 2]}>
+        <mesh position={[width / 2 - postWidth / 2, height / 2, depth / 2 - postWidth / 2]} onClick={handleRackClick}>
           <boxGeometry args={postArgs} />
           <meshStandardMaterial {...materialProps} />
         </mesh>
 
-        <mesh position={[0, height, 0]}>
+        <mesh position={[0, height, 0]} onClick={handleRackClick}>
           <boxGeometry args={topBottomArgs} />
           <meshStandardMaterial {...materialProps} />
         </mesh>
-        <mesh position={[0, 0, 0]}>
+        <mesh position={[0, 0, 0]} onClick={handleRackClick}>
           <boxGeometry args={topBottomArgs} />
           <meshStandardMaterial {...materialProps} />
         </mesh>
@@ -222,9 +238,16 @@ const RackModel = ({
             转到侧面时两个面在同一深度，GPU 无法判断渲染顺序导致闪烁
             现将侧板移到立柱内侧（外表面 ±0.248，距立柱内表面 ±0.250 留 0.002 间隙） */}
         {[-1, 1].map(side => (
-          <mesh key={`side-${side}`} position={[side * (width / 2 - postWidth - 0.005), height / 2, 0]}>
+          <mesh key={`side-${side}`} position={[side * (width / 2 - postWidth - 0.005), height / 2, 0]} onClick={handleRackClick}>
             <boxGeometry args={[0.006, height - 0.04, depth - 0.04]} />
-            <meshStandardMaterial color="#6b7280" roughness={0.35} metalness={0.8} side={2} />
+            <meshStandardMaterial
+              color={isSelected ? '#2563eb' : '#6b7280'}
+              roughness={0.35}
+              metalness={0.8}
+              side={2}
+              transparent={dimmed}
+              opacity={dimmed ? 0.12 : 1}
+            />
           </mesh>
         ))}
 
@@ -245,9 +268,16 @@ const RackModel = ({
           <mesh
             key={`front-rail-${side}`}
             position={[side * (width / 2 - postWidth - 0.003), height / 2, depth / 2 - 0.01]}
+            onClick={handleRackClick}
           >
             <boxGeometry args={[0.004, height - 0.04, 0.015]} />
-            <meshStandardMaterial color="#cbd5e1" roughness={0.25} metalness={0.95} />
+            <meshStandardMaterial
+              color="#cbd5e1"
+              roughness={0.25}
+              metalness={0.95}
+              transparent={dimmed}
+              opacity={dimmed ? 0.12 : 1}
+            />
           </mesh>
         ))}
 
@@ -269,16 +299,26 @@ const RackModel = ({
 
         {/* U位数字标签 - 共享 geometry，按 texture 区分 */}
         {uLabels}
+
+        {/* 选中高亮：整机房模式下选中的机柜显示蓝色发光边框 */}
+        {isSelected && (
+          <mesh position={[0, height / 2, 0]}>
+            <boxGeometry args={[width + 0.06, height + 0.06, depth + 0.06]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.25} wireframe />
+          </mesh>
+        )}
       </group>
     );
-  }, [width, height, depth, postWidth, uLabels, majorTickInstances, minorTickInstances, majorTickGeo, majorTickMat, minorTickGeo, minorTickMat]);
+  }, [width, height, depth, postWidth, uLabels, majorTickInstances, minorTickInstances, majorTickGeo, majorTickMat, minorTickGeo, minorTickMat, onRackClick, rack, isSelected, dimmed]);
 
   return (
     <group position={[0, 0.5, 0]}>
       {frame}
 
       <group position={[0, 0.1, 0]}>
-        {devices.map(device => {
+        {/* 聚焦模式下非聚焦机柜淡化：不渲染设备，避免视觉干扰 */}
+        {!dimmed &&
+          devices.map(device => {
           const uStart = device.position || device.u_position || 1;
           const uSize = device.height || device.u_height || 1;
           const yPos = (uStart - 1) * uHeight + (uSize * uHeight) / 2;

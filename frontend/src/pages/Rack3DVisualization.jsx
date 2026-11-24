@@ -99,6 +99,10 @@ const Rack3DVisualization = () => {
     setDeviceCables,
     loadingDevices,
     setLoadingDevices,
+    viewMode,
+    setViewMode,
+    devicesByRack,
+    setDevicesByRack,
   } = useScene3D();
 
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -125,6 +129,10 @@ const Rack3DVisualization = () => {
 
   // 使用 ref 存储模态框状态，避免 handleDeviceHover 频繁重新创建
   const modalsOpenRef = useRef(false);
+
+  // 整机房模式下聚焦选中的机柜（突前放大显示，效果参考单机柜展示）
+  // null = 显示全部机柜；非 null = 聚焦该机柜
+  const [focusRack, setFocusRack] = useState(null);
 
   // 同步 ref 与 state
   useEffect(() => {
@@ -311,6 +319,58 @@ const Rack3DVisualization = () => {
     }
   }, []);
 
+  // 拉取整机房所有机柜的设备（机柜ID → 设备数组映射）
+  // 修复：接收 targetRack 参数，避免闭包捕获旧的 selectedRack（切换机房时拿到旧值）
+  const fetchRoomDevices = useCallback(async (targetRack) => {
+    const rackForRoom = targetRack || selectedRack;
+    if (!rackForRoom) return;
+    const roomId = rackForRoom.roomId || rackForRoom.Room?.roomId;
+    if (!roomId) return;
+    try {
+      setLoadingDevices(true);
+      const roomRacks = racks.filter(r => {
+        const rRoomId = r.roomId || r.Room?.roomId;
+        return rRoomId === roomId;
+      });
+      const map = {};
+      await Promise.all(
+        roomRacks.map(async r => {
+          try {
+            const response = await axios.get(`/api/devices?rackId=${r.rackId}&pageSize=100`);
+            let devicesData = [];
+            if (Array.isArray(response.data)) {
+              devicesData = response.data;
+            } else if (response.data && Array.isArray(response.data.data)) {
+              devicesData = response.data.data;
+            } else if (response.data && Array.isArray(response.data.devices)) {
+              devicesData = response.data.devices;
+            }
+            const validDevices = devicesData.filter(d => {
+              if (!d.deviceId && !d.id) return false;
+              if (!d.deviceId && d.id) d.deviceId = d.id;
+              let pos = d.position || d.u_position;
+              let h = d.height || d.u_height || 1;
+              if (typeof pos === 'string') pos = parseInt(pos, 10);
+              if (typeof h === 'string') h = parseInt(h, 10);
+              d.position = pos;
+              d.height = h;
+              return typeof pos === 'number' && !isNaN(pos);
+            });
+            map[r.rackId] = validDevices;
+          } catch (e) {
+            map[r.rackId] = [];
+          }
+        })
+      );
+      setDevicesByRack(map);
+    } catch (error) {
+      console.error('Failed to fetch room devices:', error);
+      message.error('获取整机房设备失败');
+    } finally {
+      setLoadingDevices(false);
+    }
+  }, [selectedRack, racks, setDevicesByRack, setLoadingDevices]);
+
   // Fetch Tooltip Fields from API
   const fetchTooltipDeviceFields = useCallback(async () => {
     try {
@@ -371,10 +431,14 @@ const Rack3DVisualization = () => {
 
   useEffect(() => {
     if (selectedRack?.rackId) {
-      fetchDevices(selectedRack.rackId);
+      if (viewMode === 'room') {
+        fetchRoomDevices();
+      } else {
+        fetchDevices(selectedRack.rackId);
+      }
       setSelectedDevice(null);
     }
-  }, [selectedRack, fetchDevices]);
+  }, [selectedRack, fetchDevices, viewMode, fetchRoomDevices]);
 
   // 使用排序 Hook
   const sortedRooms = useSortedRacks(racks);
@@ -393,9 +457,18 @@ const Rack3DVisualization = () => {
     return Array.from(roomMap.values());
   }, [racks]);
 
+  // 右侧面板/统计所用的设备数据：
+  // 整机房模式下 devicesByRack 有所有机柜设备，单机柜模式用 devices
+  const panelDevices = useMemo(() => {
+    if (viewMode === 'room' && selectedRack) {
+      return devicesByRack[selectedRack.rackId] || [];
+    }
+    return devices;
+  }, [viewMode, selectedRack, devicesByRack, devices]);
+
   // 计算机柜统计数据的 useMemo
   const rackStats = useMemo(() => {
-    if (!selectedRack || !devices.length) {
+    if (!selectedRack || !panelDevices.length) {
       return {
         usedU: 0,
         usagePercent: 0,
@@ -405,10 +478,10 @@ const Rack3DVisualization = () => {
     }
 
     // 计算已用U位（考虑设备高度）
-    const usedU = devices.reduce((sum, device) => sum + (device.height || 1), 0);
+    const usedU = panelDevices.reduce((sum, device) => sum + (device.height || 1), 0);
 
     // 计算总功率
-    const totalPower = devices.reduce((sum, device) => {
+    const totalPower = panelDevices.reduce((sum, device) => {
       const power = parseFloat(device.powerConsumption) || 0;
       return sum + power;
     }, 0);
@@ -425,7 +498,7 @@ const Rack3DVisualization = () => {
       totalPower,
       availableU,
     };
-  }, [selectedRack, devices]);
+  }, [selectedRack, panelDevices]);
 
   const racksInSelectedRoom = useMemo(() => {
     if (!selectedRoom) return [];
@@ -526,16 +599,68 @@ const Rack3DVisualization = () => {
 
   const handleRackSelect = useCallback((rack, room) => {
     setSelectedRack(rack);
+    setFocusRack(null);
     if (room) {
       const roomKey = room.key || room.roomId || room.id || room.name;
       setSelectedRoom(roomKey);
     }
+    // 整机房视图下切换机柜需重新拉取新机房的设备
+    // 修复：直接传 rack 给 fetchRoomDevices，避免 setTimeout 闭包捕获旧 selectedRack
+    if (viewMode === 'room') {
+      fetchRoomDevices(rack);
+    }
+  }, [setSelectedRack, viewMode, racks, fetchRoomDevices]);
+
+  // 整机房模式下，点击 3D 机柜模型直接选中该机柜
+  // 选中后：更新 selectedRack + selectedRoom，设备拉取由 useEffect 处理
+  // 聚焦逻辑：点击机柜 -> 突前放大聚焦该机柜；再次点击已聚焦机柜 -> 退出聚焦展示全部机柜
+  const handleRackClick3D = useCallback(
+    rack => {
+      if (!rack) return;
+      // 点击已聚焦的机柜 -> 退出聚焦，展示全部机柜
+      if (focusRack?.rackId === rack.rackId) {
+        setFocusRack(null);
+        return;
+      }
+      setFocusRack(rack);
+      setSelectedRack(rack);
+      const roomKey = rack.roomId || rack.Room?.roomId || rack.Room?.id || rack.Room?.name;
+      if (roomKey) setSelectedRoom(roomKey);
+    },
+    [setSelectedRack, focusRack]
+  );
+
+  // 点击背景空白处退出聚焦，展示全部机柜
+  const handleBackgroundClick = useCallback(() => {
+    setFocusRack(null);
   }, []);
 
   const handleRefresh = useCallback(() => {
     fetchRacks();
-    if (selectedRack) fetchDevices(selectedRack.rackId);
-  }, [fetchRacks, selectedRack, fetchDevices]);
+    if (selectedRack) {
+      if (viewMode === 'room') {
+        fetchRoomDevices();
+      } else {
+        fetchDevices(selectedRack.rackId);
+      }
+    }
+  }, [fetchRacks, selectedRack, fetchDevices, viewMode, fetchRoomDevices]);
+
+  // 视图切换：单机柜 ↔ 整机房
+  const handleViewModeChange = useCallback(
+    mode => {
+      setViewMode(mode);
+      setFocusRack(null);
+      if (selectedRack) {
+        if (mode === 'room') {
+          fetchRoomDevices();
+        } else {
+          fetchDevices(selectedRack.rackId);
+        }
+      }
+    },
+    [setViewMode, selectedRack, fetchRoomDevices, fetchDevices]
+  );
 
   const handleResetView = useCallback(() => {
     if (sceneRef.current) sceneRef.current.resetView();
@@ -575,6 +700,8 @@ const Rack3DVisualization = () => {
         onBack={handleBack}
         isFullscreen={isFullscreen}
         onToggleFullscreen={handleToggleFullscreen}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
       />
 
       <div
@@ -615,7 +742,51 @@ const Rack3DVisualization = () => {
                 tooltipFields={tooltipFields}
                 deviceSlideEnabled={deviceSlideEnabled}
                 modalsOpen={modalVisible || nicModalVisible || portModalVisible || cableModalVisible}
+                viewMode={viewMode}
+                onRackClick={handleRackClick3D}
+                focusRack={viewMode === 'room' ? focusRack : null}
+                onBackgroundClick={handleBackgroundClick}
               />
+
+              {/* 聚焦模式提示条：点击退出聚焦展示全部机柜 */}
+              {viewMode === 'room' && focusRack && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 20,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(30, 58, 138, 0.9)',
+                    color: '#fff',
+                    padding: '8px 20px',
+                    borderRadius: 20,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    zIndex: 30,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    boxShadow: '0 4px 16px rgba(30, 58, 138, 0.25)',
+                    pointerEvents: 'auto',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => setFocusRack(null)}
+                >
+                  <span>
+                    已聚焦：{focusRack.name || focusRack.rackId}（点击机柜或此处退出，展示全部机柜）
+                  </span>
+                  <span
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      borderRadius: 10,
+                      padding: '2px 10px',
+                      fontSize: 12,
+                    }}
+                  >
+                    退出选中 ✕
+                  </span>
+                </div>
+              )}
 
               {/* Rack Info Overlay - 浅色玻璃态右侧面板 */}
               {selectedRack && (
@@ -770,7 +941,7 @@ const Rack3DVisualization = () => {
                         }}
                       >
                         <div style={{ fontSize: '20px', fontWeight: 700, color: '#059669', lineHeight: 1 }}>
-                          {devices.length}
+                          {panelDevices.length}
                         </div>
                         <div style={{ fontSize: '10px', color: '#64748B', marginTop: 3, fontWeight: 500 }}>
                           设备数
@@ -786,7 +957,7 @@ const Rack3DVisualization = () => {
                         }}
                       >
                         <div style={{ fontSize: '20px', fontWeight: 700, color: '#D97706', lineHeight: 1 }}>
-                          {Math.round((devices.length / selectedRack.height) * 100)}%
+                          {Math.round((panelDevices.length / selectedRack.height) * 100)}%
                         </div>
                         <div style={{ fontSize: '10px', color: '#64748B', marginTop: 3, fontWeight: 500 }}>
                           负载率
@@ -833,7 +1004,7 @@ const Rack3DVisualization = () => {
                         },
                         {
                           label: '设备数',
-                          value: `${devices.length} 台`,
+                          value: `${panelDevices.length} 台`,
                           status: 'normal',
                           icon: <DesktopOutlined style={{ fontSize: 14, color: '#059669' }} />,
                           subValue: `负载率 ${rackStats.usagePercent}%`,
@@ -1007,7 +1178,7 @@ const Rack3DVisualization = () => {
                     {
                       icon: <DesktopOutlined style={{ fontSize: 14, color: '#059669' }} />,
                       label: '设备数',
-                      value: `${devices.length}`,
+                      value: `${panelDevices.length}`,
                       color: '#059669',
                     },
                     {

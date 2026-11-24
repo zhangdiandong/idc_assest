@@ -11,6 +11,8 @@ import {
   MenuOutlined,
   SwapOutlined,
   DesktopOutlined,
+  AppstoreOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import CascadingRackPanel from './CascadingRackPanel';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
@@ -52,6 +54,8 @@ const RackSelectorHeader = ({
   onBack,
   isFullscreen = false,
   onToggleFullscreen,
+  viewMode = 'single',
+  onViewModeChange,
 }) => {
   const [selectorVisible, setSelectorVisible] = useState(false);
   const selectorRef = useRef(null);
@@ -482,11 +486,40 @@ const RackSelectorHeader = ({
     );
   };
 
+  /**
+   * 渲染视图切换按钮（单机柜 / 整机房）
+   */
+  const renderViewModeToggle = () => {
+    if (!onViewModeChange) return null;
+    return (
+      <Tooltip title={viewMode === 'room' ? '切换为单机柜视图' : '切换为整机房视图'} placement="bottom">
+        <Button
+          type={viewMode === 'room' ? 'primary' : 'default'}
+          icon={viewMode === 'room' ? <DatabaseOutlined /> : <AppstoreOutlined />}
+          onClick={() => onViewModeChange(viewMode === 'room' ? 'single' : 'room')}
+          className="header-action-btn"
+          style={{
+            borderRadius: 8,
+            borderColor: viewMode === 'room' ? 'transparent' : 'rgba(30, 58, 138, 0.15)',
+            color: viewMode === 'room' ? '#fff' : '#1E3A8A',
+            background: viewMode === 'room' ? 'linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)' : 'rgba(255, 255, 255, 0.7)',
+            height: 36,
+            padding: '0 12px',
+            fontWeight: 500,
+          }}
+        >
+          {!isMobile && !config.buttonIconOnly && (viewMode === 'room' ? '整机房' : '单机柜')}
+        </Button>
+      </Tooltip>
+    );
+  };
+
   const renderRightSection = () => {
     if (config.collapseActions) {
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           {renderDeviceSlideToggle()}
+          {renderViewModeToggle()}
           {renderFullscreenButton()}
           <Dropdown menu={{ items: dropdownMenuItems }} trigger={['click']} placement="bottomRight">
             <Button
@@ -510,6 +543,7 @@ const RackSelectorHeader = ({
         }}
       >
         {renderDeviceSlideToggle()}
+        {renderViewModeToggle()}
         {ACTION_BUTTONS_CONFIG.map(renderActionButton)}
         {renderFullscreenButton()}
       </div>

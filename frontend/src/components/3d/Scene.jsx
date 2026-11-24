@@ -14,6 +14,10 @@ import {
   useDevices,
   useSelectedDevice,
   useDeviceSlideEnabled,
+  useViewMode,
+  useDevicesByRack,
+  useSelectedRack,
+  useRacks,
 } from '../../stores/scene3DStore';
 import * as THREE from 'three';
 import ErrorBoundary from '../ErrorBoundary';
@@ -28,6 +32,11 @@ const deviceDpr = isMobile || isSmallScreen ? 1 : [1, 2];
 // 创建全局 ref 用于外部访问 controls
 const controlsRefGlobal = { current: null };
 
+/**
+ * 计算机柜相关的3D场景参数（统一一份计算，避免Controls和Scene不一致）
+ * RackModel 中：最外层 group y=0.5，机柜框架高度 = rackHeight*0.04445 + 0.2（含上下板）
+ * 因此机柜中心 y = 0.5 + (rackHeight*0.04445 + 0.2) / 2
+ */
 /**
  * 计算机柜相关的3D场景参数（统一一份计算，避免Controls和Scene不一致）
  * RackModel 中：最外层 group y=0.5，机柜框架高度 = rackHeight*0.04445 + 0.2（含上下板）
@@ -50,6 +59,68 @@ const getRackSceneParams = (rack) => {
 };
 
 /**
+ * 计算整机房多机柜场景参数
+ * 将机房内所有机柜按 colPos/rowPos 排布，相机对准整体中心
+ */
+const getRoomSceneParams = (racks) => {
+  if (!racks || racks.length === 0) {
+    return getRackSceneParams({ height: 42 });
+  }
+  const uHeight = 0.04445;
+  const maxRackHeight = Math.max(...racks.map(r => r.height || 42));
+  const rackTotalHeight = maxRackHeight * uHeight + 0.2;
+  const targetY = 0.5 + rackTotalHeight / 2;
+
+  // 机柜横向间距（机柜宽0.6 + 间隔0.9）
+  const rackSpacingX = 1.6;
+  const rackSpacingZ = 2.0;
+  // 计算整体包围盒中心
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  racks.forEach(r => {
+    const col = r.colPos || 1;
+    const row = r.rowPos || 1;
+    const x = (col - 1) * rackSpacingX;
+    const z = (row - 1) * rackSpacingZ;
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+  });
+  const centerX = (minX + maxX) / 2;
+  const centerZ = (minZ + maxZ) / 2;
+  const width = Math.max(1, maxX - minX + 0.6);
+  const depth = Math.max(1, maxZ - minZ + 1.0);
+  const maxSpan = Math.max(width, depth, rackTotalHeight);
+
+  const distance = Math.max(4, maxSpan * 1.4);
+  const cameraPosition = new THREE.Vector3(centerX + distance * 0.5, targetY + rackTotalHeight * 0.4, centerZ + distance);
+  const target = new THREE.Vector3(centerX, targetY, centerZ);
+  const minDistance = Math.max(1.5, rackTotalHeight * 0.4);
+  const maxDistance = Math.max(10, maxSpan * 3);
+
+  return { rackTotalHeight, targetY, distance, cameraPosition, target, minDistance, maxDistance };
+};
+
+/**
+ * 计算机房聚焦机柜场景参数
+ * 整机房模式下点击选中某机柜后，相机突前放大聚焦到该机柜（效果参考单机柜展示）
+ * 基础参数沿用 getRackSceneParams，但将相机 target/cameraPosition 平移到
+ * 该机柜在世界坐标中的实际位置（由 colPos/rowPos 决定）
+ */
+const getFocusRackSceneParams = (focusRack) => {
+  const base = getRackSceneParams(focusRack);
+  const rackSpacingX = 1.6;
+  const rackSpacingZ = 2.0;
+  const col = focusRack?.colPos || 1;
+  const row = focusRack?.rowPos || 1;
+  const worldX = (col - 1) * rackSpacingX;
+  const worldZ = (row - 1) * rackSpacingZ;
+
+  const cameraPosition = base.cameraPosition.clone().add(new THREE.Vector3(worldX, 0, worldZ));
+  const target = base.target.clone().add(new THREE.Vector3(worldX, 0, worldZ));
+
+  return { ...base, cameraPosition, target };
+};
+
+/**
  * 相机初始化组件：在 OrbitControls 接管前，确保相机朝向 target
  * 避免 OrbitControls 以默认方向初始化导致内部状态不一致
  */
@@ -69,10 +140,15 @@ const CameraInitializer = ({ cameraPosition, target }) => {
 };
 
 // 内部组件用于处理 OrbitControls
-const Controls = ({ rack, onControlsReady, modalsOpen = false }) => {
+const Controls = ({ rack, roomRacks, focusRack, onControlsReady, modalsOpen = false }) => {
   const controlsRef = useRef();
   const { camera } = useThree();
-  const params = useMemo(() => getRackSceneParams(rack), [rack]);
+  const params = useMemo(() => {
+    // 整机房模式下聚焦某机柜：用聚焦机柜的相机参数
+    if (focusRack) return getFocusRackSceneParams(focusRack);
+    if (roomRacks && roomRacks.length > 1) return getRoomSceneParams(roomRacks);
+    return getRackSceneParams(rack);
+  }, [rack, roomRacks, focusRack]);
   const { cameraPosition, target, minDistance, maxDistance } = params;
 
   // target 数组形式，用于 OrbitControls 的 target prop
@@ -143,12 +219,84 @@ const Controls = ({ rack, onControlsReady, modalsOpen = false }) => {
   );
 };
 
+/**
+ * 场景地板组件：半透明面板 + 网格线
+ * 提供空间参考，增强机柜放置的真实感
+ */
+const Floor = ({ racks = [], viewMode = 'single' }) => {
+  const uHeight = 0.04445;
+  const rackSpacingX = 1.6;
+  const rackSpacingZ = 2.0;
+
+  // 根据机房机柜分布计算地板范围
+  const { centerX, centerZ, floorSize, panelColor, gridColor } = useMemo(() => {
+    if (viewMode === 'room' && racks.length > 1) {
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      racks.forEach(r => {
+        const col = r.colPos || 1;
+        const row = r.rowPos || 1;
+        const x = (col - 1) * rackSpacingX;
+        const z = (row - 1) * rackSpacingZ;
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+      });
+      const cx = (minX + maxX) / 2;
+      const cz = (minZ + maxZ) / 2;
+      const size = Math.max(maxX - minX, maxZ - minZ, 4) + 4;
+      return { centerX: cx, centerZ: cz, floorSize: size, panelColor: '#f1f5f9', gridColor: '#cbd5e1' };
+    }
+    // 单机柜：以小范围地板为主
+    return { centerX: 0, centerZ: 0, floorSize: 4, panelColor: '#f1f5f9', gridColor: '#cbd5e1' };
+  }, [racks, viewMode, rackSpacingX, rackSpacingZ]);
+
+  return (
+    <group>
+      {/* 半透明面板 */}
+      <mesh position={[centerX, -0.01, centerZ]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[floorSize, floorSize]} />
+        <meshStandardMaterial
+          color={panelColor}
+          transparent
+          opacity={0.85}
+          roughness={0.9}
+          metalness={0.05}
+        />
+      </mesh>
+      {/* 网格线 */}
+      <gridHelper
+        args={[floorSize, Math.max(8, Math.round(floorSize)), gridColor, gridColor]}
+        position={[centerX, 0, centerZ]}
+      />
+      {/* 边缘描边 */}
+      <mesh position={[centerX, -0.005, centerZ]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[floorSize, floorSize]} />
+        <meshBasicMaterial color="#e2e8f0" transparent opacity={0.35} side={2} />
+      </mesh>
+    </group>
+  );
+};
+
 const Scene = forwardRef(
-  ({ rack, tooltipFields, onDeviceClick, onDeviceHover, onDeviceLeave, modalsOpen = false }, ref) => {
+  ({ rack, tooltipFields, onDeviceClick, onDeviceHover, onDeviceLeave, onRackClick, focusRack = null, onBackgroundClick, modalsOpen = false }, ref) => {
     // 从 Context 获取3D场景状态（使用 selector 精准订阅，避免全量订阅导致过度渲染）
     const devices = useDevices();
     const selectedDevice = useSelectedDevice();
     const deviceSlideEnabled = useDeviceSlideEnabled();
+    const viewMode = useViewMode();
+    const devicesByRack = useDevicesByRack();
+    const selectedRack = useSelectedRack();
+    const racks = useRacks();
+
+    // 整机房视图下，计算该机房的所有机柜
+    const roomRacks = useMemo(() => {
+      if (viewMode !== 'room' || !selectedRack) return [];
+      const roomId = selectedRack.roomId || selectedRack.Room?.roomId;
+      if (!roomId) return [];
+      return racks.filter(r => {
+        const rRoomId = r.roomId || r.Room?.roomId;
+        return rRoomId === roomId;
+      });
+    }, [viewMode, selectedRack, racks]);
 
     // 用于存储 controls API
     const controlsApiRef = useRef(null);
@@ -175,6 +323,7 @@ const Scene = forwardRef(
         onDeviceHover,
         tooltipFields,
         deviceSlideEnabled,
+        onRackClick,
       }),
       [
         rack,
@@ -185,11 +334,39 @@ const Scene = forwardRef(
         onDeviceHover,
         tooltipFields,
         deviceSlideEnabled,
+        onRackClick,
       ]
     );
 
-    // 统一使用 getRackSceneParams 计算相机位置，与 Controls 保持一致
-    const params = useMemo(() => getRackSceneParams(rack), [rack]);
+    // 整机房视图：为每个机柜构建 props
+    const roomRackModelProps = useMemo(() => {
+      if (viewMode !== 'room') return [];
+      return roomRacks.map(r => {
+        const rDevices = devicesByRack[r.rackId] || [];
+        const isFocus = focusRack?.rackId === r.rackId;
+        return {
+          rack: r,
+          devices: rDevices,
+          selectedDeviceId: selectedDevice?.id,
+          onDeviceClick,
+          onDeviceLeave,
+          onDeviceHover,
+          tooltipFields,
+          deviceSlideEnabled,
+          onRackClick,
+          isSelected: selectedRack?.rackId === r.rackId,
+          // 聚焦模式下非聚焦机柜淡化（半透明）
+          isFocusDimmed: !!focusRack && !isFocus,
+        };
+      });
+    }, [viewMode, roomRacks, devicesByRack, selectedDevice?.id, onDeviceClick, onDeviceLeave, onDeviceHover, tooltipFields, deviceSlideEnabled, onRackClick, selectedRack, focusRack]);
+
+    // 整机房模式下聚焦某机柜：相机突前放大到该机柜（效果参考单机柜展示）
+    const params = useMemo(() => {
+      if (viewMode === 'room' && focusRack) return getFocusRackSceneParams(focusRack);
+      if (viewMode === 'room' && roomRacks.length > 1) return getRoomSceneParams(roomRacks);
+      return getRackSceneParams(rack);
+    }, [viewMode, roomRacks, rack, focusRack]);
     const cameraPosition = useMemo(
       () => [params.cameraPosition.x, params.cameraPosition.y, params.cameraPosition.z],
       [params]
@@ -213,6 +390,15 @@ const Scene = forwardRef(
             powerPreference: 'high-performance',
           }}
           style={{ background: 'transparent', touchAction: 'none' }}
+          // 点击空白区域（非机柜/设备）退出聚焦模式：整机房下点击背景恢复全部机柜
+          // 修复：原用 onClick 导致点击机柜时聚焦被立即清除（R3F mesh onClick 的
+          // stopPropagation 只阻止 R3F 内部冒泡，不阻止 Canvas 的 DOM onClick）。
+          // 改用 onPointerMissed：仅在射线未命中任何 mesh 时触发，点击机柜/设备不会触发。
+          onPointerMissed={e => {
+            if (viewMode === 'room' && onBackgroundClick) {
+              onBackgroundClick();
+            }
+          }}
         >
           <PerspectiveCamera makeDefault position={cameraPosition} fov={45} />
 
@@ -227,18 +413,50 @@ const Scene = forwardRef(
               如需启用阴影，需同步在机柜框架、设备机身上添加 castShadow/receiveShadow 并启用 Canvas shadows */}
           <directionalLight position={[10, 10, 5]} intensity={1} />
 
+          {/* 地板：提供空间参考，增强机柜放置真实感 */}
+          <Floor racks={viewMode === 'room' ? roomRacks : []} viewMode={viewMode} />
+
           <Suspense fallback={null}>
             <Environment files={envMapUrl} blur={0.5} resolution={256} background={false} />
           </Suspense>
 
           {/* Models */}
-          <group position={[0, 0, 0]}>
-            <RackModel {...rackModelProps} />
-          </group>
+          {viewMode === 'room' && roomRackModelProps.length > 1 ? (
+            <group position={[0, 0, 0]}>
+              {roomRackModelProps.map((props, index) => {
+                // 机柜位置：根据 colPos/rowPos 排布
+                const col = props.rack.colPos || 1;
+                const row = props.rack.rowPos || 1;
+                const rackSpacingX = 1.6;
+                const rackSpacingZ = 2.0;
+                // 聚焦模式下：只显示当前聚焦机柜，隐藏其他机柜
+                // 需求：选中机柜后只显示当前机柜，效果参考单机柜展示
+                const isFocus = focusRack?.rackId === props.rack.rackId;
+                if (focusRack && !isFocus) {
+                  // 聚焦模式下非聚焦机柜完全隐藏（不渲染）
+                  return null;
+                }
+                return (
+                  <group
+                    key={props.rack.rackId || `rack-${index}`}
+                    position={[(col - 1) * rackSpacingX, 0, (row - 1) * rackSpacingZ]}
+                  >
+                    <RackModel {...props} dimmed={false} />
+                  </group>
+                );
+              })}
+            </group>
+          ) : (
+            <group position={[0, 0, 0]}>
+              <RackModel {...rackModelProps} />
+            </group>
+          )}
 
           {/* Controls - 使用独立组件保持旋转中心固定 */}
           <Controls
             rack={rack}
+            roomRacks={viewMode === 'room' ? roomRacks : null}
+            focusRack={viewMode === 'room' ? focusRack : null}
             modalsOpen={modalsOpen}
             onControlsReady={api => {
               controlsApiRef.current = api;

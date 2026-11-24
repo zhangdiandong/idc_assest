@@ -649,9 +649,8 @@ const DeviceModel = ({
   const { camera } = useThree();
   const prevCameraZRef = useRef(null);
 
-  // 双击检测：记录上次点击时间，区分单击（选中）和双击（滑出）
-  const lastClickTimeRef = useRef(0);
-  const DOUBLE_CLICK_THRESHOLD = 300; // 双击间隔阈值（毫秒）
+  // 点击设备弹出/收回效果：单击切换滑出状态（见 onClick）
+  // 移除原双击检测逻辑（与 Drawer 冲突）
 
   // 近距离细节控制：用 ref.visible 替代 state，避免切换时 mesh 挂载/卸载导致闪烁
   // 所有细节 mesh 始终挂载，远距离时 visible=false 跳过渲染
@@ -1472,17 +1471,13 @@ const DeviceModel = ({
         ref={groupRef}
         onClick={e => {
           e.stopPropagation();
-          // 双击检测：300ms 内的第二次点击视为双击，切换滑出状态
-          const now = Date.now();
-          const isDoubleClick =
-            now - lastClickTimeRef.current < DOUBLE_CLICK_THRESHOLD;
-          lastClickTimeRef.current = now;
-
-          if (isDoubleClick) {
-            // 双击：切换滑出状态
+          // 点击设备：弹出/收回效果（设备滑出）
+          // 需求：点击设备时弹出/收回。开启"设备弹出"开关后，单击切换滑出状态，
+          // 再次单击同一设备收回。同时打开设备详情 Drawer。
+          if (slideEnabled) {
             isExtendedRef.current = !isExtendedRef.current;
           }
-          // 单击和双击都触发选中回调（让详情面板打开）
+          // 单击触发选中回调（让详情面板打开）
           onClick && onClick(device);
         }}
         onPointerOver={e => {

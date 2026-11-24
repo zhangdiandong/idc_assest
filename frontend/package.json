@@ -16,12 +16,13 @@
   "scripts": {
     "start": "vite",
     "dev": "vite",
-    "build": "vite build",
+    "build": "node build.esbuild.mjs",
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --ext js,jsx --fix",
     "format": "prettier --write \"src/**/*.{js,jsx,css,json}\"",
-    "format:check": "prettier --check \"src/**/*.{js,jsx,css,json}\""
+    "format:check": "prettier --check \"src/**/*.{js,jsx,css,json}\"",
+    "build:vite": "vite build"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

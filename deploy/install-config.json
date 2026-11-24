@@ -1,0 +1,11 @@
+{
+  "dbType": "sqlite",
+  "dbConfig": {},
+  "backendPort": 8000,
+  "nodeEnv": "production",
+  "frontendDeploy": "pm2",
+  "frontendPort": "8080",
+  "domain": "localhost",
+  "nginxRoot": null,
+  "savedAt": "2026-11-23T09:37:32.154Z"
+}

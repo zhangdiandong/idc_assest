@@ -714,6 +714,11 @@ function DeviceDetailDrawer({
       width={700}
       open={visible}
       onClose={onClose}
+      // 修复：不显示遮罩（mask），让设备弹出/收回效果可见，
+      // 且用户可直接点击设备收回，无需先关闭 Drawer
+      mask={false}
+      // 遮罩不可点击关闭（无遮罩）
+      maskClosable={false}
       extra={
         <Tooltip title="编辑设备信息">
           <Button icon={<EditOutlined />} onClick={() => onEdit?.(device)}>

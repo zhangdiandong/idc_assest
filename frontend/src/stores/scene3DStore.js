@@ -15,6 +15,10 @@ export const useScene3DStore = create((set) => ({
   deviceCables: [],
   loadingDevices: false,
 
+  // 整机房多机柜视图状态
+  viewMode: 'single', // 'single' = 单机柜聚焦 | 'room' = 整机房所有机柜
+  devicesByRack: {}, // { [rackId]: Device[] }
+
   // 统一使用 set* 前缀命名，避免重复 API 造成使用混乱
   setSelectedDevice: (device) => set({ selectedDevice: device }),
   setHoveredDevice: (device) => set({ hoveredDevice: device }),
@@ -24,6 +28,8 @@ export const useScene3DStore = create((set) => ({
   setSelectedRack: (rack) => set({ selectedRack: rack }),
   setDeviceCables: (cables) => set({ deviceCables: cables }),
   setLoadingDevices: (loading) => set({ loadingDevices: loading }),
+  setViewMode: (mode) => set({ viewMode: mode }),
+  setDevicesByRack: (map) => set({ devicesByRack: map }),
 
   clearDeviceSelection: () => set({ selectedDevice: null, hoveredDevice: null }),
 
@@ -37,6 +43,8 @@ export const useScene3DStore = create((set) => ({
       racks: [],
       deviceCables: [],
       loadingDevices: false,
+      viewMode: 'single',
+      devicesByRack: {},
     }),
 }));
 
@@ -45,3 +53,6 @@ export const useSelectedDevice = () => useScene3DStore((state) => state.selected
 export const useRacks = () => useScene3DStore((state) => state.racks);
 export const useSelectedRack = () => useScene3DStore((state) => state.selectedRack);
 export const useDeviceSlideEnabled = () => useScene3DStore((state) => state.deviceSlideEnabled);
+export const useViewMode = () => useScene3DStore((state) => state.viewMode);
+export const useDevicesByRack = () => useScene3DStore((state) => state.devicesByRack);
+
